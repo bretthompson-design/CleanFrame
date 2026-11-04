@@ -1,6 +1,21 @@
 /* Bundled gallery and offline appearance parameters. */
 window.CleanFrameWallpapers = [
   {
+    "id": "lake",
+    "name": "Morning lake",
+    "src": "assets/wallpapers/lake.jpg",
+    "thumb": "assets/wallpapers/lake-thumb.jpg",
+    "tone": "light",
+    "ut": {
+      "tr": "mist",
+      "br": "mist"
+    },
+    "frostVeil": 0.2,
+    "listColumn": 0,
+    "dockQuiet": false,
+    "clockMist": true
+  },
+  {
     "id": "misty",
     "name": "Misty coast",
     "src": "assets/wallpapers/misty.jpg",
