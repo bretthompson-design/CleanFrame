@@ -320,7 +320,7 @@ try {
     for (const viewport of [{ width: 1920, height: 1080 }, { width: 1280, height: 720 }]) {
       await current.setViewportSize(viewport);
       for (const layout of ['dock', 'list']) {
-        await look({ layout, focus: 'glass' }); await scene('home');
+        await look({ layout, apps: 'both', focus: 'glass' }); await scene('home');
         const labels = await current.locator(layout === 'dock' ? '.tile-content' : '.ph-name').evaluateAll(elements => elements.filter(e => e.getClientRects().length).map(e => e.getBoundingClientRect().width));
         check(layout + ' labels retain width at ' + viewport.width, labels.length > 0 && labels.every(width => width > 0), labels);
         await nav(layout === 'dock' ? 'up' : 'right');
@@ -459,7 +459,7 @@ try {
     check('Consumer catalogue excludes services, self and duplicate YouTube', names.length === 12 && names.filter(n => n === 'YouTube').length === 1 && !names.includes('CleanFrame') && !names.includes('Background worker'), names);
     check('Installed names stay text, including HTML punctuation', names.includes(UNSAFE_NAME) && !(await current.evaluate(() => window.__catalogXss)));
     check('Exploration fixtures do not appear', !names.includes('Plex') && !names.includes('Jellyfin'));
-    await act('apps.open.' + SPOTIFY); await current.waitForFunction(() => __tv.calls.length > 0);
+    await act('apps.open.spotify'); await current.waitForFunction(() => __tv.calls.length > 0);
     check('Extra-brand app launches native ID', (await current.evaluate(() => __tv.calls.at(-1))).id === SPOTIFY);
     await current.evaluate(() => window.dispatchEvent(new Event('focus')));
     await scene('home'); await act('home.app.netflix'); await current.waitForFunction(() => __tv.calls.length === 2);

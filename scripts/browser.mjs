@@ -27,7 +27,8 @@ export async function openPreview({ publicFonts = false } = {}) {
         if (match) { clearTimeout(timeout); resolve(match[0]); }
       });
     });
-    browser = await chromium.launch({ headless: true });
+    // CLEANFRAME_CHROME lets a machine without the Playwright download use an installed Chrome.
+    browser = await chromium.launch({ headless: true, executablePath: process.env.CLEANFRAME_CHROME || undefined, args: process.env.CLEANFRAME_CHROME ? ['--no-sandbox'] : [] });
     return { browser, baseURL, close: async () => {
       try { await browser.close(); }
       finally { server.kill(); await once(server, 'exit'); }
