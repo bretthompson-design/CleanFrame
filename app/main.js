@@ -41,6 +41,7 @@
     { id: '5', name: 'Every 5 minutes', min: 5 }, { id: '15', name: 'Every 15 minutes', min: 15 },
     { id: '60', name: 'Every hour', min: 60 }
   ];
+  var IDLE = [{ id: 'off', name: 'Never', min: 0 }, { id: '5', name: 'After 5 minutes', min: 5 }, { id: '10', name: 'After 10 minutes', min: 10 }, { id: '30', name: 'After 30 minutes', min: 30 }];
   var KEY = 'cleanframe.home.v1', storageOk = true, catalog = { loading: false, loaded: false, error: null, request: 0, revision: 0 };
   var QA = window.ShoreQA = { minuteMs: window.ShoreQA && window.ShoreQA.minuteMs || 60000 };
   var FONTS = {
@@ -355,7 +356,8 @@
       clock: pick(modern.clock, LOOK_VALUES.clock, '12'), date: pick(modern.date, LOOK_VALUES.date, 'on'), weather: pick(modern.weather, LOOK_VALUES.weather, 'on'),
       font: pick(modern.font, LOOK_VALUES.font, 'manrope'), wall: wall(modern.wall || s.wallpaper) ? modern.wall || s.wallpaper : WALLS[0].id,
       home: h, recent: recent, lastApp: h.indexOf(s.lastApp) >= 0 ? s.lastApp : h[0],
-      mode: pick(s.mode, MODES.map(function (m) { return m.id; }), '15')
+      mode: pick(s.mode, MODES.map(function (m) { return m.id; }), '15'),
+      idle: pick(s.idle, IDLE.map(function (m) { return m.id; }), '10')
     };
   }
   function serialise(c) {
@@ -380,7 +382,7 @@
   }
   function clearSession() { S.undo = []; S.removedAt = {}; S.note = null; S.err = null; }
   function begin() { S.note = null; }
-  function next(home, recent) { var c = lookOf(S.c); c.home = home; c.recent = recent; c.lastApp = S.c.lastApp; c.mode = S.c.mode; return c; }
+  function next(home, recent) { var c = lookOf(S.c); c.home = home; c.recent = recent; c.lastApp = S.c.lastApp; c.mode = S.c.mode; c.idle = S.c.idle; return c; }
   function snap() { return { home: S.c.home.slice(), recent: S.c.recent.slice() }; }
   function pushRecent(list, id) { return [id].concat(without(list, id)).slice(0, 5); }
   function write(c, label) {
@@ -515,7 +517,7 @@
   function addAppsRoute() { openEditor('home'); }
   function openSettings() { push({ id: 'settings', f: { id: S.settingsFocus } }); }
   function openAppearance(group) {
-    var axis = { background: 'bg', layout: 'layout', typography: 'font', clock: 'clock', focus: 'focus' }[group];
+    var axis = { background: 'bg', layout: 'layout', typography: 'font', clock: 'clock', focus: 'focus', artmode: 'idle' }[group];
     var action = S.detailFocus[group] || (axis ? 'choice.' + axis + '.' + S.c[axis] : group === 'rotation' ? 'rotation.' + S.c.mode : 'samsung.home');
     push({ id: 'appearance', group: group, f: { action: action } });
   }
@@ -832,6 +834,7 @@
       { id: 'clock', label: 'Clock', value: VALUE_NAMES[S.c.clock] + (S.c.date !== 'off' ? ', date' : '') + (S.c.weather !== 'off' ? ', weather' : '') },
       { id: 'focus', label: 'Focus', value: VALUE_NAMES[S.c.focus] + (materialApplies() ? ', ' + VALUE_NAMES[S.c.material] : '') },
       { id: 'editor', label: 'Apps on Home', value: n + (n === 1 ? ' app' : ' apps') },
+      { id: 'artmode', label: 'Art Mode', value: idleMode().min ? idleMode().name + ' idle' : 'Never automatic' },
       { id: 'samsung', label: 'Samsung', value: 'Home and TV settings' }];
   }
   function settingsIds() { return settingsRows().map(function (r) { return r.id; }); }
@@ -852,15 +855,16 @@
     if (id === 'editor') openEditor('settings');
     else openAppearance(id);
   }
-  var DETAIL_NAMES = { background: 'Background', layout: 'Layout', typography: 'Typography', clock: 'Clock', lights: 'Lights', focus: 'Focus', rotation: 'Rotation', samsung: 'Samsung', inputs: 'Inputs' };
+  var DETAIL_NAMES = { background: 'Background', layout: 'Layout', typography: 'Typography', clock: 'Clock', lights: 'Lights', artmode: 'Art Mode', focus: 'Focus', rotation: 'Rotation', samsung: 'Samsung', inputs: 'Inputs' };
   function choice(axis, value, disabled) {
     return { action: axis === 'mode' ? 'rotation.' + value : 'choice.' + axis + '.' + value, axis: axis, value: value, disabled: !!disabled,
-      label: axis === 'font' ? FONTS[value].name : axis === 'mode' ? MODES.filter(function (m) { return m.id === value; })[0].name : value === 'both' ? 'Both' : VALUE_NAMES[value] };
+      label: axis === 'font' ? FONTS[value].name : axis === 'mode' ? MODES.filter(function (m) { return m.id === value; })[0].name : axis === 'idle' ? IDLE.filter(function (m) { return m.id === value; })[0].name : value === 'both' ? 'Both' : VALUE_NAMES[value] };
   }
   function detailSections(t) {
     var flat = S.c.bg !== 'photo', inactive = !materialApplies();
     function options(axis, values, disabled) { return values.map(function (value) { return choice(axis, value, disabled); }); }
     if (t.group === 'lights') return lightsSections(t);
+    if (t.group === 'artmode') return [{ id: 'idle', title: '', items: options('idle', IDLE.map(function (m) { return m.id; })), reason: 'When no button is pressed for this long, the TV switches to Art Mode.' }];
     if (t.group === 'inputs') return [{ id: 'inputs', title: '', items: t.inputs.length ? t.inputs.map(function (input) {
       return { action: 'input.' + input.number, label: input.name, description: input.active ? 'Active' : input.connected ? 'Connected' : 'Disconnected — may be asleep' };
     }) : [{ action: 'inputs.retry', label: t.loading ? 'Loading inputs…' : 'Try again', disabled: t.loading }],
@@ -915,6 +919,26 @@
     if (item.action !== 'settings.back') S.detailFocus[t.group] = item.action;
     if (column !== undefined) t.f.column = column;
     if (item.axis) S.appearanceFocus = item.axis;
+  }
+  function idleMode() { for (var i = 0; i < IDLE.length; i++) if (IDLE[i].id === S.c.idle) return IDLE[i]; return IDLE[0]; }
+  function applyIdle(value) {
+    var c;
+    S.err = null; S.lookError = null;
+    if (value === S.c.idle) return;
+    c = next(S.c.home.slice(), S.c.recent.slice()); c.idle = value;
+    if (!write(c, 'Art Mode timer')) S.lookError = { type: 'save', patch: { idle: value }, row: 'idle', transient: false };
+    syncIdle();
+  }
+  var idleTimer = 0;
+  function syncIdle() {
+    clearTimeout(idleTimer); idleTimer = 0;
+    if (!idleMode().min || document.hidden || !window.tizen || window.__tv) return;
+    idleTimer = setTimeout(function () {
+      idleTimer = 0;
+      if (document.hidden || busy || !idleMode().min) return;
+      log('Idle: Art Mode');
+      perform('Art Mode', FrameDevice.art);
+    }, idleMode().min * QA.minuteMs);
   }
   function applyRotation(value) {
     var c;
@@ -1011,8 +1035,10 @@
     if (item.action === 'settings.retry') {
       if (error && error.patch[error.row] !== undefined) detailFocus(t, choice(error.row, error.patch[error.row]), 0);
       if (error && error.row === 'mode') applyRotation(error.patch.mode);
+      else if (error && error.row === 'idle') applyIdle(error.patch.idle);
       else if (error) setLook(error.patch, { row: error.row });
     } else if (item.axis === 'mode') applyRotation(item.value);
+    else if (item.axis === 'idle') applyIdle(item.value);
     else if (item.axis) { patch[item.axis] = item.value; setLook(patch, { row: item.axis }); }
     else if (item.action === 'background.wallpaper') openWallpaper();
     else if (item.action === 'background.rotation') openAppearance('rotation');
@@ -1033,7 +1059,7 @@
   V.appearance = {
     norm: function (t) {
       var rows = detailRows(t), exists = false, applied = null;
-      var axis = { background: 'bg', layout: 'layout', typography: 'font', clock: 'clock', focus: 'focus', rotation: 'mode' }[t.group];
+      var axis = { background: 'bg', layout: 'layout', typography: 'font', clock: 'clock', focus: 'focus', rotation: 'mode', artmode: 'idle' }[t.group];
       rows.forEach(function (items) { items.forEach(function (item) {
         if (item.action === t.f.action) exists = true;
         if (item.axis === axis && item.value === S.c[axis]) applied = item;
@@ -1078,6 +1104,7 @@
   /* ---------- Dispatch ---------- */
   function norm() { var t = top(), v = V[t.id]; if (v.norm) v.norm(t); }
   function press(k) {
+    syncIdle();
     norm();
     var t = top();
     V[t.id].key(t, k);
@@ -2003,9 +2030,9 @@
   window.addEventListener('focus', function () { FrameDevice.cancelSource(); release(); refreshInputsOnReturn(); focusStage(); after(); updateClock(); syncWeather(); });
   document.addEventListener('visibilitychange', function () {
     heldKeys = {};
-    if (document.hidden) { FrameDevice.cancelSource(); pauseRotation(); clearTimeout(clockTimer); clearTimeout(weather.timer); }
+    if (document.hidden) { FrameDevice.cancelSource(); pauseRotation(); clearTimeout(clockTimer); clearTimeout(weather.timer); clearTimeout(idleTimer); }
     else {
-      release(); syncWeather();
+      release(); syncWeather(); syncIdle();
       if (S.c.bg === 'photo' && !S.pending && !S.previewBundle && (!committedBundle || S.bundleKey !== bundleKey(S.c))) setLook({}, { transient: true, startup: true });
       refreshInputsOnReturn(); after(); updateClock(); focusStage();
     }
@@ -2046,5 +2073,5 @@
   cueL.innerHTML = icon('left'); cueR.innerHTML = icon('right');
   initialise();
   setLook({}, { transient: true, startup: true });
-  norm(); render(); fit(); focusStage(); updateClock(); syncRotation(); syncWeather();
+  norm(); render(); fit(); focusStage(); updateClock(); syncRotation(); syncWeather(); syncIdle();
 })();
