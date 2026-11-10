@@ -51,8 +51,8 @@
     newsreader: { name: 'Newsreader', family: 'Study Newsreader', display: 400, ui: 400, clock: 400 }
   };
   var PRIVATE_FONTS = window.CleanFramePrivateFontIDs || [], fontMetrics = {}, unavailableFonts = {}, widthCache = {}, fontRevision = 0, fontsReady = false;
-  var LOOK_VALUES = { bg: ['dark', 'light', 'photo'], layout: ['list', 'dock'], apps: ['icons', 'both', 'text'], font: Object.keys(FONTS).filter(function (id) { return id === 'manrope' || PRIVATE_FONTS.indexOf(id) >= 0; }), controls: ['icons', 'both', 'text'], focus: ['type', 'glass'], material: ['soft', 'frost', 'tint'], clock: ['12', '24'], date: ['on', 'off'] };
-  var LOOK_NAMES = { bg: 'Background', layout: 'Layout', apps: 'Apps', font: 'Font', controls: 'Home controls', focus: 'Focus', material: 'Material', clock: 'Clock', date: 'Date' };
+  var LOOK_VALUES = { bg: ['dark', 'light', 'photo'], layout: ['list', 'dock'], apps: ['icons', 'both', 'text'], font: Object.keys(FONTS).filter(function (id) { return id === 'manrope' || PRIVATE_FONTS.indexOf(id) >= 0; }), controls: ['icons', 'both', 'text'], focus: ['type', 'glass'], material: ['soft', 'frost', 'tint'], clock: ['12', '24'], date: ['on', 'off'], weather: ['on', 'off'] };
+  var LOOK_NAMES = { bg: 'Background', layout: 'Layout', apps: 'Apps', font: 'Font', controls: 'Home controls', focus: 'Focus', material: 'Material', clock: 'Clock', date: 'Date', weather: 'Weather' };
   var VALUE_NAMES = { dark: 'Dark', light: 'Light', photo: 'Photo', list: 'List', dock: 'Dock', type: 'Type', glass: 'Glass', soft: 'Soft', frost: 'Frost', tint: 'Clear tint', icons: 'Icons', both: 'Icons and text', text: 'Text', '12': '12-hour', '24': '24-hour', on: 'Shown', off: 'Hidden' };
   var UTIL = { art: ['Art Mode', 'art'], apps: ['All apps', 'apps'], arrange: ['Arrange', 'arrange'], settings: ['Settings', 'settings'] };
   var MSG = {
@@ -92,7 +92,7 @@
     for (var i = 0; i < list.length; i++) if (list[i].toLowerCase() === v) return list[i];
     return fallback;
   }
-  function lookOf(c) { return { bg: c.bg, wall: c.wall, layout: c.layout, apps: c.apps, font: c.font, controls: c.controls, focus: c.focus, material: c.material, clock: c.clock, date: c.date }; }
+  function lookOf(c) { return { bg: c.bg, wall: c.wall, layout: c.layout, apps: c.apps, font: c.font, controls: c.controls, focus: c.focus, material: c.material, clock: c.clock, date: c.date, weather: c.weather }; }
   function materialApplies(c) { c = c || S.c; return c.bg === 'photo' && (c.layout === 'dock' || c.focus === 'glass'); }
 
   /* ---------- Helpers ---------- */
@@ -351,7 +351,7 @@
       bg: pick(modern.bg, LOOK_VALUES.bg, legacyList ? 'dark' : 'photo'), layout: pick(modern.layout, LOOK_VALUES.layout, legacyList ? 'list' : 'dock'),
       apps: pick(modern.apps, LOOK_VALUES.apps, legacyList ? 'text' : 'icons'), controls: pick(modern.controls, LOOK_VALUES.controls, 'icons'),
       focus: pick(modern.focus, LOOK_VALUES.focus, legacyList ? 'type' : 'glass'), material: pick(modern.material, LOOK_VALUES.material, 'soft'),
-      clock: pick(modern.clock, LOOK_VALUES.clock, '12'), date: pick(modern.date, LOOK_VALUES.date, 'on'),
+      clock: pick(modern.clock, LOOK_VALUES.clock, '12'), date: pick(modern.date, LOOK_VALUES.date, 'on'), weather: pick(modern.weather, LOOK_VALUES.weather, 'on'),
       font: pick(modern.font, LOOK_VALUES.font, 'manrope'), wall: wall(modern.wall || s.wallpaper) ? modern.wall || s.wallpaper : WALLS[0].id,
       home: h, recent: recent, lastApp: h.indexOf(s.lastApp) >= 0 ? s.lastApp : h[0],
       mode: pick(s.mode, MODES.map(function (m) { return m.id; }), '15')
@@ -874,7 +874,8 @@
     if (t.group === 'typography') return [
       { id: 'font', title: 'Font', items: options('font', LOOK_VALUES.font) },
       { id: 'clock', title: 'Clock', horizontal: true, items: options('clock', ['12', '24']) },
-      { id: 'date', title: 'Date', horizontal: true, items: options('date', ['on', 'off']) }
+      { id: 'date', title: 'Date', horizontal: true, items: options('date', ['on', 'off']) },
+      { id: 'weather', title: 'Weather', horizontal: true, items: options('weather', ['on', 'off']) }
     ];
     if (t.group === 'focus') return [
       { id: 'focus', title: 'Focus style', horizontal: true, items: options('focus', ['type', 'glass']) },
@@ -1096,6 +1097,40 @@
   }
   var DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'], MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
   function dateText() { var d = new Date(); return DAYS[d.getDay()] + ', ' + MONTHS[d.getMonth()] + ' ' + d.getDate(); }
+
+  /* ---------- Weather (Open-Meteo, no key; Cuyahoga Falls) ---------- */
+  var WEATHER_URL = 'https://api.open-meteo.com/v1/forecast?latitude=41.134&longitude=-81.485&current=temperature_2m,weather_code&temperature_unit=fahrenheit&timezone=auto';
+  var WEATHER_WORDS = { 0: 'Clear', 1: 'Mostly clear', 2: 'Partly cloudy', 3: 'Overcast', 45: 'Fog', 48: 'Fog', 51: 'Drizzle', 53: 'Drizzle', 55: 'Drizzle', 56: 'Freezing drizzle', 57: 'Freezing drizzle', 61: 'Light rain', 63: 'Rain', 65: 'Heavy rain', 66: 'Freezing rain', 67: 'Freezing rain', 71: 'Light snow', 73: 'Snow', 75: 'Heavy snow', 77: 'Snow grains', 80: 'Showers', 81: 'Showers', 82: 'Heavy showers', 85: 'Snow showers', 86: 'Snow showers', 95: 'Thunderstorm', 96: 'Thunderstorm', 99: 'Thunderstorm' };
+  var weather = { text: '', at: 0, timer: 0, busy: false };
+  function weatherEnabled() { return S.c.weather !== 'off' && ((window.tizen && !window.__tv) || /[?&]weather=1/.test(window.location.search)); }
+  function weatherText() { return weatherEnabled() ? weather.text : ''; }
+  function fetchWeather() {
+    if (weather.busy || !weatherEnabled() || typeof window.XMLHttpRequest === 'undefined') return;
+    var xhr = new window.XMLHttpRequest(), done = false;
+    weather.busy = true;
+    function finish(text) {
+      if (done) return; done = true; weather.busy = false;
+      if (text !== null) { weather.text = text; weather.at = Date.now(); if (top().id === 'home' || isSettingsDetail(top())) renderCaption(top(), homeState(top())); }
+    }
+    try {
+      xhr.open('GET', WEATHER_URL, true); xhr.timeout = 10000;
+      xhr.onload = function () {
+        try {
+          var data = JSON.parse(xhr.responseText), cur = data && data.current, t = cur && cur.temperature_2m, code = cur && cur.weather_code;
+          if (typeof t !== 'number') { finish(null); return; }
+          finish(Math.round(t) + '\u00b0' + (WEATHER_WORDS[code] ? ' \u00b7 ' + WEATHER_WORDS[code] : ''));
+        } catch (e) { finish(null); }
+      };
+      xhr.onerror = xhr.ontimeout = function () { finish(null); };
+      xhr.send();
+    } catch (e) { finish(null); }
+  }
+  function syncWeather() {
+    clearTimeout(weather.timer); weather.timer = 0;
+    if (!weatherEnabled() || document.hidden) return;
+    if (Date.now() - weather.at > 14 * 60000) fetchWeather();
+    weather.timer = setTimeout(syncWeather, 15 * 60000);
+  }
   function clockHtml() {
     var text = clockText(), metrics = fontMetrics[homeFont()];
     if (!metrics || !metrics.digitCell) return text;
@@ -1103,7 +1138,8 @@
   }
   function renderCaption(t, hs) {
     var html = '<span class="clock">' + clockHtml() + '</span>';
-    if (S.c.date !== 'off') html += '<span class="cap-line cap-date">' + dateText() + '</span>';
+    if (S.c.date !== 'off') html += '<span class="cap-line cap-date">' + dateText() + (weatherText() ? '<span class="cap-weather">' + esc(weatherText()) + '</span>' : '') + '</span>';
+    else if (weatherText()) html += '<span class="cap-line cap-date"><span class="cap-weather is-alone">' + esc(weatherText()) + '</span></span>';
     if (S.c.apps !== 'icons' && hs.items[hs.i] && (S.c.layout === 'list' ? photoLabel(hs.items[hs.i].id, false).size < 88 || photoLabel(hs.items[hs.i].id, false).ellipsis : hs.zone === 'apps' && reducedDockLabel(hs.items[hs.i].id))) html += '<span class="cap-line full-name">' + esc(app(hs.items[hs.i].id).name) + '</span>';
     setHTML(caption, html);
   }
@@ -1887,12 +1923,12 @@
   });
   document.addEventListener('keyup', function (ev) { delete heldKeys[ev.keyCode]; });
   window.addEventListener('blur', function () { heldKeys = {}; });
-  window.addEventListener('focus', function () { FrameDevice.cancelSource(); release(); refreshInputsOnReturn(); focusStage(); after(); updateClock(); });
+  window.addEventListener('focus', function () { FrameDevice.cancelSource(); release(); refreshInputsOnReturn(); focusStage(); after(); updateClock(); syncWeather(); });
   document.addEventListener('visibilitychange', function () {
     heldKeys = {};
-    if (document.hidden) { FrameDevice.cancelSource(); pauseRotation(); clearTimeout(clockTimer); }
+    if (document.hidden) { FrameDevice.cancelSource(); pauseRotation(); clearTimeout(clockTimer); clearTimeout(weather.timer); }
     else {
-      release();
+      release(); syncWeather();
       if (S.c.bg === 'photo' && !S.pending && !S.previewBundle && (!committedBundle || S.bundleKey !== bundleKey(S.c))) setLook({}, { transient: true, startup: true });
       refreshInputsOnReturn(); after(); updateClock(); focusStage();
     }
@@ -1933,5 +1969,5 @@
   cueL.innerHTML = icon('left'); cueR.innerHTML = icon('right');
   initialise();
   setLook({}, { transient: true, startup: true });
-  norm(); render(); fit(); focusStage(); updateClock(); syncRotation();
+  norm(); render(); fit(); focusStage(); updateClock(); syncRotation(); syncWeather();
 })();
