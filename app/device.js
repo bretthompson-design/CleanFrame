@@ -4,19 +4,19 @@
   var IDS = {
     youtube: '9Ur5IzDKqV.TizenYouTube', paramountplus: 'rJyOSqC6Up.CBSAllAccess',
     disneyplus: 'MCmYXNxgcu.DisneyPlus', primevideo: 'org.tizen.primevideo',
-    spotify: 'rJeHak5zRg.Spotify', netflix: 'org.tizen.netflix-app',
+    spotify: 'rJeHak5zRg.Spotify', hbomax: '5b8c3eb16b.BeamCTVDev', peacock: 'gzcc4LRFBF.Peacock', netflix: 'org.tizen.netflix-app',
     appletv: 'com.samsung.tv.aria-video', applemusic: 'org.tizen.apple.apple-music',
     stremio: 'IkWsFHtOY9.Stremio', abciview: 'mWK87Xghap.ABCiview', sbs: 'OyE7OuxlUi.SBSOnDemand'
   };
-  var STREAMING = ['as6cYRgkPy.Binge', '73iTZRTc34.Stan', '5b8c3eb16b.BeamCTVDev',
-    'cj37Ni3qXM.HBONow', 'LBUAQX1exg.Hulu', 'gzcc4LRFBF.Peacock',
+  var STREAMING = ['as6cYRgkPy.Binge', '73iTZRTc34.Stan',
+    'cj37Ni3qXM.HBONow', 'LBUAQX1exg.Hulu',
     'Rk72oKFsRS.OtterKidsProd', '70fRFUwYlD.OtterGAProd', 'PvWgqxV3Xa.YouTubeTV',
     'XtU8fQk2gN.ESPN', 'ZmmGjO6VKO.slingtv', 'VtuWAiZdHN.STARZPlay', 'ckfgqqzvt0.dplus',
     'kk8MbItQ0H.VUDU', 'Jz7aUrV2Q4.Twitch', 'OK2Rdkjmsi.IMDbTV', 'Ob3XhAVMu6.amcplus',
     'KaLitts8bq.tenplaySamsungTizen', 'eYuOiOLYQX.KayoSports', 'Ne2ZsPWdKl.9NOW',
     '3KA0pm7a7V.TubiTV', 'icp4AvUPiA.7plus'];
   var CONSUMER_SYSTEM = ['org.tizen.browser', 'com.microsoft.copilot'];
-  var EXTRA_BRANDS = {'5b8c3eb16b.BeamCTVDev': 'hbomax', 'cj37Ni3qXM.HBONow': 'hbomax', '3KA0pm7a7V.TubiTV': 'tubi'};
+  var EXTRA_BRANDS = {'cj37Ni3qXM.HBONow': 'hbomax', '3KA0pm7a7V.TubiTV': 'tubi'};
   var INTERNAL = ['adplatform.ADPlayer', 'WykOS4t4F0.cmsWebApp', '25emanual3.emanual',
     'd0m1lV1nt2.emanual', '2022ePop01.SmartTV',
     'ZODRT12q2l.WebAccountExtension', 'ByJlgt0XeD.CastSettingsApp', 'tv6pbVMQFF.PrivacyChoices'];
@@ -115,6 +115,14 @@
       api().launchAppControl(control, 'org.tizen.art-app', function () { finish(null); }, function (err) { finish(failure(err)); });
     } catch (err) { finish(failure(err)); }
   }
+  function openUrl(url, done) {
+    if (!api()) { unavailable(done); return; }
+    var finish = bounded(done);
+    try {
+      var control = new tizen.ApplicationControl('http://tizen.org/appcontrol/operation/view', url, null, null, null);
+      api().launchAppControl(control, 'org.tizen.browser', function () { finish(null); }, function (err) { finish(failure(err)); });
+    } catch (err) { finish(failure(err)); }
+  }
   function home(done) { launchApp('com.samsung.tv.csfs', done); }
   function settings(done) { launchApp('com.samsung.tv.coba.setting', done); }
   function apps(done) {
@@ -139,5 +147,5 @@
       }, function (err) { finish(failure(err)); });
     } catch (err) { finish(failure(err)); }
   }
-  window.FrameDevice = { launch: launch, launchApp: launchApp, art: art, home: home, settings: settings, apps: apps, sources: sources, setSource: setSource, cancelSource: cancelSource };
+  window.FrameDevice = { launch: launch, launchApp: launchApp, openUrl: openUrl, art: art, home: home, settings: settings, apps: apps, sources: sources, setSource: setSource, cancelSource: cancelSource };
 }());

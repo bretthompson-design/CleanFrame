@@ -19,6 +19,9 @@
     { id: 'disneyplus', name: 'Disney+', mark: true, appId: 'MCmYXNxgcu.DisneyPlus' },
     { id: 'primevideo', name: 'Prime Video', mark: true, appId: 'org.tizen.primevideo' },
     { id: 'spotify', name: 'Spotify', mark: true, appId: 'rJeHak5zRg.Spotify' },
+    { id: 'aurora', name: 'Aurora', mark: true, appId: 'org.tizen.browser', url: 'https://aurora-three-sepia.vercel.app/wall' },
+    { id: 'hbomax', name: 'HBO Max', mark: true, appId: '5b8c3eb16b.BeamCTVDev' },
+    { id: 'peacock', name: 'Peacock', mark: true, appId: 'gzcc4LRFBF.Peacock' },
     { id: 'netflix', name: 'Netflix', mark: true, appId: 'org.tizen.netflix-app' },
     { id: 'appletv', name: 'Apple TV', mark: true, appId: 'com.samsung.tv.aria-video' },
     { id: 'applemusic', name: 'Apple Music', mark: true, appId: 'org.tizen.apple.apple-music' },
@@ -27,7 +30,7 @@
     { id: 'sbs', name: 'SBS On Demand', mark: true, appId: 'OyE7OuxlUi.SBSOnDemand' }
   ];
   /* Apps shown on Home before the owner arranges it. The rest stay available under All apps. */
-  var DEFAULT_HOME = ['youtube', 'paramountplus', 'disneyplus', 'primevideo', 'spotify'];
+  var DEFAULT_HOME = ['youtube', 'paramountplus', 'disneyplus', 'primevideo', 'hbomax', 'peacock', 'spotify', 'aurora'];
   var PRIMARY = PRIMARY_APPS.map(function (a) { return a.id; }), APPS = PRIMARY_APPS.slice(), ALPHA = [];
   var WALLS = window.CleanFrameWallpapers || [{ id: 'misty', name: 'Misty coast', tone: 'light', ut: { tr: 'mist', br: 'mist' }, frostVeil: .20 }];
   var ADAPTIVE_INK = window.CleanFrameAdaptiveInk || {};
@@ -466,7 +469,7 @@
     if (!a || busy) return;
     if (S.c.home.indexOf(id) >= 0) { c = next(S.c.home.slice(), S.c.recent.slice()); c.lastApp = id; write(c, 'Last app'); }
     S.press = id; S.lastLaunch = a.name;
-    perform(a.name, function (done) { FrameDevice.launchApp(a.appId, done); });
+    perform(a.name, function (done) { if (a.url) FrameDevice.openUrl(a.url, done); else FrameDevice.launchApp(a.appId, done); });
   }
   function refreshCatalog() {
     var request, oldFocus;
