@@ -21,6 +21,7 @@
     { id: 'spotify', name: 'Spotify', mark: true, appId: 'rJeHak5zRg.Spotify' },
     { id: 'aurora', name: 'Aurora', mark: true, appId: 'org.tizen.browser', url: 'https://aurora-three-sepia.vercel.app/wall' },
     { id: 'hbomax', name: 'HBO Max', mark: true, appId: '5b8c3eb16b.BeamCTVDev' },
+    { id: 'lights', name: 'Lights', mark: true, appId: 'hue.lights', lights: true },
     { id: 'peacock', name: 'Peacock', mark: true, appId: 'gzcc4LRFBF.Peacock' },
     { id: 'netflix', name: 'Netflix', mark: true, appId: 'org.tizen.netflix-app' },
     { id: 'appletv', name: 'Apple TV', mark: true, appId: 'com.samsung.tv.aria-video' },
@@ -30,7 +31,7 @@
     { id: 'sbs', name: 'SBS On Demand', mark: true, appId: 'OyE7OuxlUi.SBSOnDemand' }
   ];
   /* Apps shown on Home before the owner arranges it. The rest stay available under All apps. */
-  var DEFAULT_HOME = ['youtube', 'paramountplus', 'disneyplus', 'primevideo', 'hbomax', 'peacock', 'spotify', 'aurora'];
+  var DEFAULT_HOME = ['youtube', 'paramountplus', 'disneyplus', 'primevideo', 'hbomax', 'peacock', 'spotify', 'aurora', 'lights'];
   var PRIMARY = PRIMARY_APPS.map(function (a) { return a.id; }), APPS = PRIMARY_APPS.slice(), ALPHA = [];
   var WALLS = window.CleanFrameWallpapers || [{ id: 'misty', name: 'Misty coast', tone: 'light', ut: { tr: 'mist', br: 'mist' }, frostVeil: .20 }];
   var ADAPTIVE_INK = window.CleanFrameAdaptiveInk || {};
@@ -467,6 +468,7 @@
   function launch(id) {
     var a = app(id), c;
     if (!a || busy) return;
+    if (a.lights) { openLights(); return; }
     if (S.c.home.indexOf(id) >= 0) { c = next(S.c.home.slice(), S.c.recent.slice()); c.lastApp = id; write(c, 'Last app'); }
     S.press = id; S.lastLaunch = a.name;
     perform(a.name, function (done) { if (a.url) FrameDevice.openUrl(a.url, done); else FrameDevice.launchApp(a.appId, done); });
@@ -850,7 +852,7 @@
     if (id === 'editor') openEditor('settings');
     else openAppearance(id);
   }
-  var DETAIL_NAMES = { background: 'Background', layout: 'Layout', typography: 'Typography', clock: 'Clock', focus: 'Focus', rotation: 'Rotation', samsung: 'Samsung', inputs: 'Inputs' };
+  var DETAIL_NAMES = { background: 'Background', layout: 'Layout', typography: 'Typography', clock: 'Clock', lights: 'Lights', focus: 'Focus', rotation: 'Rotation', samsung: 'Samsung', inputs: 'Inputs' };
   function choice(axis, value, disabled) {
     return { action: axis === 'mode' ? 'rotation.' + value : 'choice.' + axis + '.' + value, axis: axis, value: value, disabled: !!disabled,
       label: axis === 'font' ? FONTS[value].name : axis === 'mode' ? MODES.filter(function (m) { return m.id === value; })[0].name : value === 'both' ? 'Both' : VALUE_NAMES[value] };
@@ -858,6 +860,7 @@
   function detailSections(t) {
     var flat = S.c.bg !== 'photo', inactive = !materialApplies();
     function options(axis, values, disabled) { return values.map(function (value) { return choice(axis, value, disabled); }); }
+    if (t.group === 'lights') return lightsSections(t);
     if (t.group === 'inputs') return [{ id: 'inputs', title: '', items: t.inputs.length ? t.inputs.map(function (input) {
       return { action: 'input.' + input.number, label: input.name, description: input.active ? 'Active' : input.connected ? 'Connected' : 'Disconnected — may be asleep' };
     }) : [{ action: 'inputs.retry', label: t.loading ? 'Loading inputs…' : 'Try again', disabled: t.loading }],
@@ -892,7 +895,7 @@
     ] }];
   }
   function detailRows(t) {
-    var rows = [[{ action: 'settings.back', label: t.group === 'rotation' ? 'Background' : t.group === 'inputs' ? 'Samsung' : 'Settings' }]];
+    var rows = [[{ action: 'settings.back', label: backLabel(t) }]];
     detailSections(t).forEach(function (section) {
       var enabled = section.items.filter(function (item) { return !item.disabled; });
       if (section.horizontal && enabled.length) rows.push(enabled);
@@ -901,6 +904,7 @@
     if (S.lookError) rows.push([{ action: 'settings.retry', label: 'Try again' }]);
     return rows;
   }
+  function backLabel(t) { return t.group === 'rotation' ? 'Background' : t.group === 'inputs' ? 'Samsung' : t.group === 'lights' ? (t.hueGroup ? 'Lights' : 'Home') : 'Settings'; }
   function detailLocation(t) {
     var rows = detailRows(t), row = 0, column = 0;
     rows.forEach(function (items, r) { items.forEach(function (item, c) { if (item.action === t.f.action) { row = r; column = c; } }); });
@@ -930,6 +934,75 @@
   function openInputs() {
     openAppearance('inputs'); var t = top(); t.inputs = []; loadInputs(t);
   }
+
+  /* ---------- Lights: Hue Bridge scene picker (local v1 API over the LAN) ---------- */
+  var HUE = window.CleanFrameHue || null;
+  function hueReady() { return !!(HUE && HUE.bridge && HUE.key && HUE.key.indexOf('__') < 0 && ((window.tizen && !window.__tv) || /[?&]hue=1/.test(window.location.search))); }
+  function hueRequest(method, path, body, done) {
+    var xhr, finished = false;
+    function finish(err, data) { if (finished) return; finished = true; done(err, data); }
+    try {
+      xhr = new window.XMLHttpRequest();
+      xhr.open(method, HUE.bridge + '/api/' + HUE.key + path, true); xhr.timeout = 8000;
+      xhr.onload = function () {
+        var data = null;
+        try { data = JSON.parse(xhr.responseText); } catch (e) { finish({ message: 'The Hue Bridge sent an unexpected reply.' }); return; }
+        if (data && data[0] && data[0].error) { finish({ message: 'The Hue Bridge refused the request.', detail: data[0].error.description || '' }); return; }
+        finish(null, data);
+      };
+      xhr.onerror = xhr.ontimeout = function () { finish({ message: 'Could not reach the Hue Bridge.', detail: 'Check that the Bridge is on and the TV is on the same network.' }); };
+      xhr.send(body ? JSON.stringify(body) : null);
+    } catch (e) { finish({ message: 'Could not reach the Hue Bridge.' }); }
+  }
+  function loadLights(t) {
+    t.loading = true; t.lightsError = null;
+    if (!hueReady()) { t.loading = false; t.lightsError = HUE ? 'Lights are available on the TV.' : 'No Hue Bridge is configured.'; after(); return; }
+    hueRequest('GET', '/groups', null, function (err, groups) {
+      if (top() !== t) return;
+      if (err) { t.loading = false; t.lightsError = err.message; after(); return; }
+      hueRequest('GET', '/scenes', null, function (err2, scenes) {
+        if (top() !== t) return;
+        t.loading = false;
+        if (err2) { t.lightsError = err2.message; after(); return; }
+        var byName = {}, list = [], gid, sid, hide = HUE.hideScenes || [];
+        for (gid in groups) if (groups.hasOwnProperty(gid) && groups[gid].name) byName[groups[gid].name] = gid;
+        (HUE.groups || []).forEach(function (name) {
+          var id = byName[name], seen = {}, items = [];
+          if (!id) return;
+          for (sid in scenes) if (scenes.hasOwnProperty(sid) && scenes[sid].group === id && scenes[sid].name && hide.indexOf(scenes[sid].name) < 0 && !seen[scenes[sid].name]) {
+            seen[scenes[sid].name] = true; items.push({ id: sid, name: scenes[sid].name });
+          }
+          items.sort(function (a, b) { return a.name.toLowerCase().localeCompare(b.name.toLowerCase()); });
+          list.push({ id: id, name: name, scenes: items });
+        });
+        t.lights = list; after();
+      });
+    });
+  }
+  function openLights() {
+    openAppearance('lights'); var t = top(); t.lights = []; loadLights(t);
+  }
+  var HUE_ROW = 4;
+  function lightsSections(t) {
+    var g = null, items, chunks = [], i;
+    if (!t.lights || !t.lights.length) return [{ id: 'lights', title: '', items: [{ action: 'lights.retry', label: t.loading ? 'Loading scenes…' : 'Try again', disabled: t.loading }],
+      reason: t.lightsError || (!t.loading ? 'No rooms or zones matched the configured list.' : '') }];
+    if (!t.hueGroup) return [{ id: 'lights', title: '', items: t.lights.map(function (grp) { return { action: 'lights.group.' + grp.id, label: grp.name, description: grp.scenes.length + (grp.scenes.length === 1 ? ' scene' : ' scenes') }; }), reason: '' }];
+    t.lights.forEach(function (grp) { if (grp.id === t.hueGroup) g = grp; });
+    if (!g) return [{ id: 'lights', title: '', items: [{ action: 'settings.back', label: 'Back' }], reason: 'That room is no longer available.' }];
+    items = [{ action: 'hue.off.' + g.id, label: 'Off' }].concat(g.scenes.map(function (sc) { return { action: 'hue.scene.' + g.id + '.' + sc.id, label: sc.name }; }));
+    for (i = 0; i < items.length; i += HUE_ROW) chunks.push({ id: 'hue-' + g.id + '-' + i, title: i === 0 ? g.name : '', horizontal: true, items: items.slice(i, i + HUE_ROW) });
+    return chunks;
+  }
+  function openLightsGroup(parent, gid) {
+    openAppearance('lights'); var t = top(); t.lights = parent.lights; t.hueGroup = gid; t.f.action = 'hue.off.' + gid;
+  }
+  function applyLights(t, item) {
+    var parts = item.action.split('.'), gid = parts[2], body = parts[1] === 'off' ? { on: false } : { scene: parts[3] };
+    perform(item.label, function (done) {
+      hueRequest('PUT', '/groups/' + gid + '/action', body, function (err) { done(top() === t && !document.hidden ? err : null); });
+    });
+  }
   function detailBack() { cancelLook(); S.err = null; pop(); FrameDevice.cancelSource(); }
   function detailOk(t, item) {
     var patch = {}, error = S.lookError;
@@ -947,6 +1020,9 @@
     else if (item.action === 'samsung.settings') perform('TV settings', FrameDevice.settings);
     else if (item.action === 'samsung.inputs') openInputs();
     else if (item.action === 'inputs.retry') loadInputs(t);
+    else if (item.action === 'lights.retry') loadLights(t);
+    else if (item.action.indexOf('lights.group.') === 0) openLightsGroup(t, item.action.slice(13));
+    else if (item.action.indexOf('hue.') === 0) applyLights(t, item);
     else if (item.action.indexOf('input.') === 0) perform(item.label, function (done) {
       FrameDevice.setSource(Number(item.action.slice(6)), function (err) {
         t.refreshInputs = true;
@@ -1055,7 +1131,7 @@
   function render() {
     var t = top(), sheet = !!V[t.id].sheet, shown = wall(S.shown ? S.shown.wall : S.c.wall), palette = ADAPTIVE_INK[shown.id];
     var adaptive = applyAdaptiveInk(palette), tr = adaptive && palette.tr ? palette.tr.pol : shown.ut.tr, br = adaptive && palette.br ? palette.br.pol : shown.ut.br;
-    stage.className = 'stage bg-' + S.c.bg + ' l-' + S.c.layout + ' v-' + S.variant + ' m-' + (materialApplies() ? S.c.material : 'none') + ' f-' + S.c.focus + ' a-' + S.c.apps + ' u-' + S.c.controls + ' g-' + S.geom + ' tone-' + shown.tone + ' tr-' + tr + ' br-' + br + wallClasses(shown) + inkRungClasses(palette, adaptive) + ' at-' + t.id + ' font-' + homeFont() + (homeFont() !== 'manrope' ? ' font-custom' : '') + (S.fontSwitch ? ' is-font-switch' : '') + (adaptive ? ' has-adaptive-ink adaptive-tl-' + palette.tl.pol : '') + (!adaptive && shown.clockInk ? ' has-clock-ink' : '') + (!adaptive && shown.dockClockInk ? ' has-dock-clock-ink' : '') + (registeredMaterial(shown.id) ? ' registered-material' : '') + (sheet ? ' is-sheet' : '') + (S.reflow ? ' is-reflow' : '');
+    stage.className = 'stage bg-' + S.c.bg + ' l-' + S.c.layout + ' v-' + S.variant + ' m-' + (materialApplies() ? S.c.material : 'none') + ' f-' + S.c.focus + ' a-' + S.c.apps + ' u-' + S.c.controls + ' g-' + S.geom + ' tone-' + shown.tone + ' tr-' + tr + ' br-' + br + wallClasses(shown) + inkRungClasses(palette, adaptive) + ' at-' + t.id + ' font-' + homeFont() + (homeFont() !== 'manrope' ? ' font-custom' : '') + (S.fontSwitch ? ' is-font-switch' : '') + (adaptive ? ' has-adaptive-ink adaptive-tl-' + palette.tl.pol : '') + (!adaptive && shown.clockInk ? ' has-clock-ink' : '') + (!adaptive && shown.dockClockInk ? ' has-dock-clock-ink' : '') + (registeredMaterial(shown.id) ? ' registered-material' : '') + (sheet ? ' is-sheet' : '') + (t.group === 'lights' && t.hueGroup ? ' is-lights-scenes' : '') + (S.reflow ? ' is-reflow' : '');
     if (!adaptive && shown.clockInk) stage.style.setProperty('--clock-ink', shown.clockInk);
     else stage.style.removeProperty('--clock-ink');
     if (!adaptive && shown.dockClockInk) stage.style.setProperty('--dock-clock-ink', shown.dockClockInk);
@@ -1458,7 +1534,7 @@
     appearanceEl.setAttribute('aria-modal', 'true');
     if (t.id === 'wallpaper') { renderWallpaper(t); return; }
     V.appearance.norm(t);
-    appearanceEl.className = 'appearance detail-' + t.group;
+    appearanceEl.className = 'appearance detail-' + t.group + (t.group === 'lights' && t.hueGroup ? ' is-scenes' : '');
     appearanceRows.className = 'appearance-rows';
     appearanceTitle.textContent = DETAIL_NAMES[t.group];
     var at = detailLocation(t), selected = at.item, error = S.lookError, status = '', hint;
@@ -1470,7 +1546,7 @@
         + ' data-z="detail" data-i="0" data-id="' + item.action + '" data-action="' + item.action + '">' + inner
         + (item.axis ? '<span class="setting-tick" aria-hidden="true">' + (applied ? icon('check') : '') + '</span>' : '') + '</button>';
     }
-    setHTML(appearanceBack, command({ action: 'settings.back', label: t.group === 'rotation' ? 'Background' : t.group === 'inputs' ? 'Samsung' : 'Settings' }, icon('left') + '<span>' + (t.group === 'rotation' ? 'Background' : t.group === 'inputs' ? 'Samsung' : 'Settings') + '</span>', 'setting-back'));
+    setHTML(appearanceBack, command({ action: 'settings.back', label: backLabel(t) }, icon('left') + '<span>' + backLabel(t) + '</span>', 'setting-back'));
     setHTML(appearanceRows, detailSections(t).map(function (section) {
       return '<section class="setting-section' + (section.horizontal ? ' is-horizontal' : '') + ' section-' + section.id + '">'
         + (section.title ? '<h3 class="setting-label" id="setting-' + section.id + '">' + section.title + '</h3>' : '')
@@ -1493,7 +1569,7 @@
         + command({ action: 'settings.retry', label: 'Try again' }, '<span>Try again</span>', 'setting-retry');
     }
     setHTML(appearanceStatus, status);
-    hint = selected.disabled ? '' : selected.action === 'settings.back' ? 'Return to ' + (t.group === 'rotation' ? 'Background' : t.group === 'inputs' ? 'Samsung' : 'Settings') : selected.action === 'settings.retry' ? 'Retry this change' : selected.axis ? 'Apply selected setting' : selected.action === 'background.wallpaper' ? 'Choose a wallpaper' : selected.action === 'background.rotation' ? 'Choose a rotation interval' : 'Open on the TV';
+    hint = selected.disabled ? '' : selected.action === 'settings.back' ? 'Return to ' + backLabel(t) : selected.action.indexOf('hue.') === 0 ? 'Set the lights' : selected.action.indexOf('lights.group.') === 0 ? 'Choose a scene' : selected.action === 'settings.retry' ? 'Retry this change' : selected.axis ? 'Apply selected setting' : selected.action === 'background.wallpaper' ? 'Choose a wallpaper' : selected.action === 'background.rotation' ? 'Choose a rotation interval' : 'Open on the TV';
     setHTML(appearanceDesc, hint ? '<span class="remote-key">OK</span><span>' + esc(hint) + '</span>' : '');
   }
   function renderWallpaper(t) {
